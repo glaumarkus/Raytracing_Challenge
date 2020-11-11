@@ -33,6 +33,7 @@
 #define RENDER true
 #define PRINTIMG false
 #define SAVING true
+#define RUN true
 
 
 /*
@@ -210,6 +211,128 @@ void CUDAmain(const std::string& filename) {
 }
 
 
+void CUDAmain_run(const std::string& filename) {
+
+    // init world
+    clock_t start_w, stop_w;
+    start_w = clock();
+
+    World* world;
+    checkCudaErrors(cudaMallocManaged((void**)&world, sizeof(World*)));
+    world->createWorld(filename);
+
+    stop_w = clock();
+    double timer_world = ((double)(stop_w - start_w)) / CLOCKS_PER_SEC;
+
+    std::cerr << "Loading World in  " << timer_world << " seconds.\n";
+    world->print();
+
+    // allocate FB with color
+    Color* fb_color;
+    
+
+
+    while (true) {
+
+        // image params from World
+        int nx = world->getWidth();
+        int ny = world->getHeight();
+
+        // threads & blocks
+        int tx = 8;
+        int ty = 8;
+
+        std::cerr << "Rendering a " << nx << "x" << ny << " image ";
+        std::cerr << "in " << tx << "x" << ty << " blocks.\n";
+
+        int num_pixels = nx * ny;
+        size_t fb_color_size = num_pixels * sizeof(Color);
+
+        checkCudaErrors(cudaMallocManaged((void**)&fb_color, fb_color_size));
+
+        clock_t start, stop;
+        start = clock();
+
+        // Render our buffer
+        dim3 blocks(nx / tx + 1, ny / ty + 1);
+        dim3 threads(tx, ty);
+
+        // render image
+        if (RENDER) renderWorld << <blocks, threads >> > (fb_color, nx, ny, *world);
+
+        // sync
+        checkCudaErrors(cudaGetLastError());
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        if (SAVING) {
+
+            std::ofstream out("out.ppm");
+            out << "P3\n" << nx << " " << ny << "\n255\n";
+
+            for (int j = ny - 1; j >= 0; j--) {
+                for (int i = 0; i < nx; i++) {
+                    size_t pixel_index = j * nx + i;
+                    int ir = int(255.99 * fb_color[pixel_index].r);
+                    int ig = int(255.99 * fb_color[pixel_index].g);
+                    int ib = int(255.99 * fb_color[pixel_index].b);
+                    out << ir << " " << ig << " " << ib << "\n";
+                }
+            }
+        }
+
+        stop = clock();
+        double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
+        std::cerr << "took " << timer_seconds << " seconds.\n";
+
+        checkCudaErrors(cudaFree(fb_color));
+
+        // what next?
+        char input[10];
+
+        std::cerr << "What action now?\n exit: programm stops\ncamera: load new camera\nworld: reload world\n";
+        std::cin >> input;
+
+        if (strcmp(input, "exit") == 0) {
+            break;
+        }
+
+        if (strcmp(input, "camera") == 0) {
+
+            std::ifstream file_("camera.txt");
+            if (!file_.is_open()) {
+                printf("Camera file not found!");
+                break;
+            }
+            std::string line_;
+            while (getline(file_, line_)) {
+                if (line_[0] == '#') continue;
+                if (line_.empty()) continue;
+                std::stringstream input(line_);
+                std::string paramName;
+                input >> paramName;
+                if (paramName == "Camera:") {
+                    float px, py, pz, fx, fy, fz, ux, uy, uz, fov;
+                    input >> px >> py >> pz >> fx >> fy >> fz >> ux >> uy >> uz >> fov;
+
+                    Vec4 origin(px, py, pz, 1.0f);
+                    Vec4 forward(fx, fy, fz);
+                    Vec4 upguide(ux, uy, uz);
+                    fov = fov * PI / 180.f;
+                    world->camera->createCamera(origin, forward, upguide, fov, aspectRatio);
+                    std::cerr << "Adjusted Camera\n";
+                    break;
+                }
+            
+            }
+        }
+
+    }
+    // Free allocated Memory
+    checkCudaErrors(cudaFree(fb_color));
+    checkCudaErrors(cudaFree(world));
+
+}
+
 int main(int argc, char* argv[]) {
 
     if (DEBUG) {
@@ -219,6 +342,12 @@ int main(int argc, char* argv[]) {
 
         std::string filename = "textures/copy.tga";
         t.exportImg("textures/copy.tga");
+        return 0;
+    }
+
+    if (RUN) {
+        std::string filename = "Scene.txt";
+        CUDAmain_run(filename);
         return 0;
     }
 
@@ -236,7 +365,6 @@ int main(int argc, char* argv[]) {
     else {
 
         std::string filename = "Scene.txt";
-        //filename = "Testscene.txt";
         CUDAmain(filename);
     }
 
