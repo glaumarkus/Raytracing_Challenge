@@ -268,6 +268,246 @@ public:
 };
 
 
+class Observation {
+private:
+public:
+
+    int shapetype, shapeid;
+    float t, u, v;
+
+    __host__ __device__ Observation() :
+        shapetype(-1),
+        shapeid(-1), 
+        t(-1.0f), 
+        u(INFINITY), 
+        v(INFINITY)
+    {}
+
+    __host__ __device__ Observation(const int& shapeid, const int& shapetype, const float& t) :
+        shapetype(shapetype),
+        shapeid(shapeid),
+        t(t),
+        u(INFINITY),
+        v(INFINITY)
+    {}
+
+    __host__ __device__ Observation(const int& shapeid, const int& shapetype, const float& t, const float& u, const float& v) :
+        shapetype(shapetype),
+        shapeid(shapeid),
+        t(t),
+        u(u),
+        v(v)
+    {}
+
+    __host__ __device__ Observation(const Observation& other) :
+        shapetype(other.shapetype),
+        shapeid(other.shapeid),
+        t(other.t),
+        u(other.u),
+        v(other.v)
+    {}
+
+    __host__ __device__ bool operator <(const Observation& other) {
+
+ 
+        if (t < 0.0f) return false;
+        if (other.t < 0.0f) return true;
+        if (t < other.t) return true;
+        return false;
+    }
+
+    __host__ __device__ Observation& operator =(const Observation& other) {
+        shapetype = other.shapetype;
+        shapeid = other.shapeid;
+        t = other.t;
+        u = other.u;
+        v = other.v;
+        return *this;
+    }
+
+    __host__ __device__ Observation& operator =(Observation&& other) {
+        shapetype = other.shapetype;
+        shapeid = other.shapeid;
+        t = other.t;
+        u = other.u;
+        v = other.v;
+        return *this;
+    }
+
+};
+
+
+class Intersection {
+public:
+
+    Observation* obs;
+
+    int capacity;
+    int current;
+
+
+    __host__ __device__ void pushINT(const int& newid, const float& newt, const int& newShape, const float& uIN, const float& vIN) {
+        /*
+        Mapping shapes:
+        1 = Sphere
+        2 = Plane
+        3 = Cube
+        4 = Cylinder
+        5 = Triangle
+        */
+
+
+        if (current == capacity) {
+            
+            Observation* temp_obs = new Observation[2 * capacity];
+
+            for (int i = 0; i < capacity; ++i) {
+                temp_obs[i] = obs[i];
+            }
+            delete[] obs;
+
+            capacity *= 2;
+
+            obs = temp_obs;
+
+        }
+
+        bool inserted = false;
+
+        // just insert in right place
+        if (current == 0) obs[current] = Observation(newid, newShape, newt, uIN, vIN);
+        else {
+            Observation o(newid, newShape, newt, uIN, vIN);
+
+            for (int i = 0; i < current; i++) {
+                float oldT = obs[i].t;
+                if (o < obs[i]) {
+                    // push all obs back
+                    for (int mv = current; mv > i; mv--) {
+                        obs[mv] = Observation(obs[mv - 1]);
+                    }
+                    obs[i] = o;
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) obs[current] = o;
+        }
+        current++;
+    }
+
+    __host__ void printOrder() {
+        for (int i = 0; i < current; i++) {
+            std::cout << obs[i].t <<"\n";
+        }
+    }
+
+    __host__ __device__ Intersection()
+    {
+        capacity = 10;
+        current = 0;
+        obs = new Observation[10];
+    }
+
+    __host__ __device__ ~Intersection() {
+        delete[] obs;
+    }
+
+    __host__ __device__ bool hit() {
+        if (current == 0) return false;
+        return obs[0].t > 0.0f ? true : false;
+    }
+
+    __host__ __device__ Observation getObs(const int& idx) {
+        return obs[idx];
+    }
+
+    __host__ __device__ int goodTs() {
+        if (current == 0) return 0;
+        return obs[0].t > 0.0f ? 1 : 0;
+    }
+
+    __host__ __device__ float getT() {
+        return obs[0].t;
+    }
+
+    __host__ __device__ float getNT(const int& n) {
+        if (n > current) return -1.0f;
+        return obs[n].t;
+    }
+
+
+
+    // individual pushes for each primitive
+    __host__ __device__ void push(const int& newid, const float& newt, Sphere* sphereHit) {
+        pushINT(newid, newt, 1, INFINITY, INFINITY);
+    }
+
+    __host__ __device__ void push(const int& newid, const float& newt, Plane* planeHit) {
+        pushINT(newid, newt, 2, INFINITY, INFINITY);
+    }
+
+    __host__ __device__ void push(const int& newid, const float& newt, Cube* cubeHit) {
+        pushINT(newid, newt, 3, INFINITY, INFINITY);
+    }
+
+    __host__ __device__ void push(const int& newid, const float& newt, Cylinder* cylinderHit) {
+        pushINT(newid, newt, 4, INFINITY, INFINITY);
+    }
+
+    __host__ __device__ void push(const int& newid, const float& newt, Triangle* triangleHit, const float& uIN, const float& vIN) {
+        pushINT(newid, newt, 5, uIN, vIN);
+    }
+
+
+
+
+    // shape primitive functions -- HIT
+    __host__ __device__ bool hitIsSphere() {
+        return obs[0].shapetype == 1 ? true : false;
+    }
+    __host__ __device__ bool hitIsPlane() {
+        return obs[0].shapetype == 2 ? true : false;
+    }
+    __host__ __device__ bool hitIsCube() {
+        return obs[0].shapetype == 3 ? true : false;
+    }
+    __host__ __device__ bool hitIsCylinder() {
+        return obs[0].shapetype == 4 ? true : false;
+    }
+    __host__ __device__ bool hitIsTriangle() {
+        return obs[0].shapetype == 5 ? true : false;
+    }
+
+    // shape primitive functions -- get ID
+    __host__ __device__ int getSphereId() {
+        return obs[0].shapeid;
+    }
+    __host__ __device__ int getPlaneId() {
+        return obs[0].shapeid;
+    }
+    __host__ __device__ int getCubeId() {
+        return obs[0].shapeid;
+    }
+    __host__ __device__ int getCylinderId() {
+        return obs[0].shapeid;
+    }
+    __host__ __device__ int getTriangleId() {
+        return obs[0].shapeid;
+    }
+
+    // triangle specific
+    __host__ __device__ float getU() const {
+        return obs[0].u;
+    }
+    __host__ __device__ float getV() const {
+        return obs[0].v;
+    }
+
+
+};
+
+
 
 
 
