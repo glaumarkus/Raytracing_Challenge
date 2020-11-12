@@ -270,6 +270,85 @@ private:
 };
 
 
+__host__ __device__ Comps World::prepare_computations(Intersection& intersection, Ray& ray) {
+    
+    Comps comps;
+
+    Observation* obs = intersection.getObs(0);
+
+    // fill intersection values
+    comps.t = obs->t;
+    comps.point = ray.position(comps.t);
+
+    // get shape normal
+    int shapetype = obs->shapetype;
+    int shapeid obs->shapeid;
+    int matid = 0;
+
+    if (shapetype == 1) {
+        comps.normal = shapes_vector[shapeid].normal_at(comps.point);
+        matid = shapes_vector[shapeid].getMatID();
+    }
+    else if (shapetype == 2) {
+        comps.normal = planes_vector[shapeid].normal_at(comps.point);
+        matid = planes_vector[shapeid].getMatID();
+    }
+    else if (shapetype == 3) {
+        comps.normal = cubes_vector[shapeid].normal_at(comps.point);
+        matid = cubes_vector[shapeid].getMatID();
+    }
+    else if (shapetype == 4) {
+        comps.normal = cylinders_vector[shapeid].normal_at(comps.point);
+        matid = cylinders_vector[shapeid].getMatID();
+    }
+    else if (shapetype == 5) {
+        comps.normal = triangle_vector[shapeid].normal_at(comps.point, obs->u, obs->v);
+        matid = triangle_vector[shapeid].getMatID();
+    }
+
+    Material tmp(materials_vector[matid]);
+    int txt = tmp.textureid;
+
+    // if texture is unequal to -1 it has been set and needs to be mapped
+    if (txt != -1) {
+
+        Vec4 txtUV = triangle_vector[idx].texture_at(comps.point, obs->u, obs->v);
+
+        // map ambient
+        if (tmp.mapA == 1) {
+            tmp.ambient = textures_vector[txt].mapColor(txtUV.x, txtUV.y);
+        }
+
+        // map diffuse
+        if (tmp.mapD == 1) {
+            tmp.ambient = textures_vector[txt].mapColor(txtUV.x, txtUV.y);
+        }
+
+        // map ambient
+        if (tmp.mapS == 1) {
+            tmp.specular = textures_vector[txt].mapColor(txtUV.x, txtUV.y);
+        }
+
+        if (tmp.mapTransparent == 1) {
+            tmp.transparent = textures_vector[txt].mapD(txtUV.x, txtUV.y);
+        }
+    }
+
+    comps.material = tmp;
+
+    comps.reflectv = reflect(ray.getDirection(), comps.normal);
+    comps.eye = ray.getDirection() * -1;
+    float nDotE = dot(comps.normal, comps.eye);
+    if (nDotE < 0) {
+        comps.inside = true;
+        comps.normal = comps.normal * -1;
+    }
+    else {
+        comps.inside = false;
+    }
+
+    return comps;
+}
 
 __host__ __device__ Comps World::prepare_computations(Intersection& intersection, Ray& ray) {
     
