@@ -59,49 +59,16 @@ __global__ void renderWorld(Color* fb_color, int max_x, int max_y, World& world)
     Intersection intersection;
     world.intersect(intersection, ray);
 
-    //intersection.print();
-
-    //return;
-
-    if (intersection.goodTs() > 0) {
-
+    if (intersection.hit()) {
         
-        //intersection.print();
-        
-        // if found an Intersection, prepare a set of vars for lighting
-        Comps comps;
-
-        int triangleID = intersection.getTriangleId();
-        Triangle localTri(world.triangle_vector[triangleID]);
-
-
-        /*
-        int materialID = world.triangle_vector[triangleID].getMatID();//localTri.getMatID();
-        Material localMat(world.materials_vector[materialID]);
-        */
-
         Comps comps2;
-
         comps2 = world.prepare_computations(intersection, ray);
-
-
-
-
-
-        
-
-        comps = prepare_computations(intersection, ray, localTri);
-
 
         // Color to change
         Color color(0);
 
-        //world.color_at(comps, color);
         world.color_at2(comps2, color);
-        
-        //Color color(1);
         fb_color[pixel_index] = color;
-
     }
     else {
         fb_color[pixel_index] = Color(0);
