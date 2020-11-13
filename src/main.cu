@@ -6,35 +6,20 @@
 #include <sstream>
 
 // local includes
-#include "Vec4.hpp"
 #include "Color.hpp"
-#include "Matrix.hpp"
 #include "Ray.hpp"
 #include "Intersection.hpp"
-#include "Light.hpp"
 #include "Camera.hpp"
 #include "Comps.hpp"
-
 #include "World.cuh"
-
-#include "Sphere.hpp"
-#include "Plane.hpp"
-#include "Cube.hpp"
-#include "Triangle.hpp"
-
-#include "OBJ_READER.hpp"
-
 #include "CUDAVector.cuh"
 
-#include "Texture.hpp"
-
-
+// defines
 #define DEBUG false
 #define RENDER true
 #define PRINTIMG false
 #define SAVING true
 #define RUN true
-
 
 #define MAX_DEPTH 3
 
