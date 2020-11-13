@@ -333,11 +333,19 @@ __host__ __device__ Comps World::prepare_computations(Intersection& intersection
             tmp.transparent = textures_vector[txt].mapD(txtUV.x, txtUV.y);
         }
     }
+    
+    
 
     comps.material = tmp;
 
     comps.reflectv = reflect(ray.getDirection(), comps.normal);
     comps.eye = ray.getDirection() * -1;
+    
+    // new
+    comps.under_point = comps.point + EPSILON * ray.getDirection();
+    comps.over_point = comps.point + EPSILON * comps.reflectv;
+    //
+    
     float nDotE = dot(comps.normal, comps.eye);
     if (nDotE < 0) {
         comps.inside = true;
