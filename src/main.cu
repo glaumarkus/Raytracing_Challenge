@@ -37,6 +37,8 @@
 
 
 #define MAX_DEPTH 3
+
+
 __global__ void renderRefraction(CUDAVector<Image_buffer>& image_buffer, int max_x, int max_y, World& world) {
 
     int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -44,6 +46,23 @@ __global__ void renderRefraction(CUDAVector<Image_buffer>& image_buffer, int max
 
     if ((i >= max_x) || (j >= max_y)) return;
     int pixel_index = j * max_x + i;
+
+    // only render if it has been set
+    if (image_buffer[pixel_index].renderReflection()) {
+
+        Ray ray(image_buffer[pixel_index].reflection.origin, image_buffer[pixel_index].reflection.direction);
+        Intersection intersection;
+        world.intersect(intersection, ray);
+
+        if (intersection.hit()) {
+            Comps comps(world.prepare_computations(intersection, ray));
+            world.color_at3(comps2, image_buffer[pixel_index]);
+        } 
+
+        else {
+            image_buffer[pixel_index].setRefractFalse();
+        }
+    }
 
     // only render if it has been set
     if (image_buffer[pixel_index].renderRefraction()) {
@@ -451,6 +470,12 @@ void CUDAmain_run(const std::string& filename) {
 
 int main(int argc, char* argv[]) {
 
+    
+    if (RUN) {
+        std::string filename = "Scene.txt";
+        CUDA_run_reflection(filename);
+        return 0;
+    }
     if (DEBUG) {
 
         std::string texturepath = "textures/sls_interior.tga";
