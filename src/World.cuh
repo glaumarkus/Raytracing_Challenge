@@ -236,7 +236,53 @@ public:
         //return;
         color.clamp();
     }
+    
 
+    __host__ __device__ void color_at3(const Comps& comps, Image_Buffer& image_buffer) {
+
+        for (int i = 0; i < lights_vector.size(); ++i) {
+            Color tmp(0);
+            Light localLight = lights_vector[i];
+
+            lighting(comps.material, localLight, comps.point, comps.eye, comps.normal, tmp);
+
+            if (comps.material.reflective > 0.0f) {
+                image_buffer.reflects = true;
+                image_buffer.reflection_ray = Ray(comps.over_point, comps.reflectv);
+            }
+
+            if (comps.material.transparent < 1.0f) {
+                
+                // calculate refraction direction
+                Vec4 newDirection = comps.eye * -1;
+
+                // current n value
+                float n1 = image_buffer.refractive_index;
+                float n2 = comps.material.refractive_index;
+
+                // compute 
+                float n_ratio = n1/n2;
+                float cos_i = dot(comps.eye, comps.normal);
+                float sin2_t = n_ratio * n_ratio * (1 - cos_i * cos_i);
+
+                if (sin2_t > 1.0f) continue; // total internal reflection
+
+                float cos_t = std::sqrt(1.0f - sin2_t);
+
+                Vec4 direction = comps.normal * (n_ratio * cos_i - cos_t) - comps.eye * n_ratio
+
+                image_buffer.refracts = true;
+                image_buffer.refraction_ray = Ray(comps.under_point, direction);
+                image_buffer.refractive_index = n2;
+            }
+
+            // decrement the visual intensity of refraction
+            image_buffer.intensity -= comps.material.transparent;
+            // seen material * (reflection strength - 1) * transparency
+            color += (tmp * (1 - comps.material.reflective)) * comps.material.transparent;
+        }
+        color.clamp();
+    }
 
     __host__ __device__ Comps prepare_computations(Intersection& intersection, Ray& ray);
 
