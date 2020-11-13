@@ -269,7 +269,7 @@ public:
 
                 float cos_t = std::sqrt(1.0f - sin2_t);
 
-                Vec4 direction = comps.normal * (n_ratio * cos_i - cos_t) - comps.eye * n_ratio
+                Vec4 direction = comps.normal * (n_ratio * cos_i - cos_t) - comps.eye * n_ratio;
 
                 image_buffer.refracts = true;
                 image_buffer.refraction_ray = Ray(comps.under_point, direction);
