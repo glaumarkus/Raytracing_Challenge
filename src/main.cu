@@ -36,6 +36,155 @@
 #define RUN true
 
 
+#define MAX_DEPTH 3
+__global__ void renderRefraction(CUDAVector<Image_buffer>& image_buffer, int max_x, int max_y, World& world) {
+
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+
+    if ((i >= max_x) || (j >= max_y)) return;
+    int pixel_index = j * max_x + i;
+
+    // only render if it has been set
+    if (image_buffer[pixel_index].renderRefraction()) {
+        Ray ray(image_buffer[pixel_index].refraction.origin, image_buffer[pixel_index].refraction.direction);
+        Intersection intersection;
+        world.intersect(intersection, ray);
+
+        if (intersection.hit()) {
+            Comps comps(world.prepare_computations(intersection, ray));
+            world.color_at3(comps2, image_buffer[pixel_index]);
+        } 
+
+        else {
+            image_buffer[pixel_index].setRefractFalse();
+        }
+    }
+}
+
+// maybe also works with device vectors ? 
+__global__ void renderWorld2(CUDAVector<Image_buffer>& image_buffer, int max_x, int max_y, World& world) {
+
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+
+    if ((i >= max_x) || (j >= max_y)) return;
+    int pixel_index = j * max_x + i;
+
+    // Camera Ray
+    float X = 2.0f * float(i) / float(max_x) - 1;
+    float Y = -2.0f * float(j) / float(max_y) + 1;
+
+    Ray ray(world.camera->getRay(X, Y));
+
+    // checking for Intersections
+    Intersection intersection;
+    world.intersect(intersection, ray);
+
+    if (intersection.hit()) {
+        Comps comps2(world.prepare_computations(intersection, ray));
+        world.color_at3(comps2, image_buffer[pixel_index]);
+    }
+}
+
+
+
+
+void CUDAmain_run2(const std::string& filename) {
+
+    World* world;
+    checkCudaErrors(cudaMallocManaged((void**)&world, sizeof(World*)));
+    world->createWorld(filename);
+
+    while (true) {
+
+        // threads & blocks
+        int tx = 8;
+        int ty = 8;
+
+        // image params from World
+        int nx = world->getWidth();
+        int ny = world->getHeight();
+
+        int num_pixels = nx * ny;
+        CUDAVector<Image_buffer> image_buffer;
+        image_buffer.reserve(num_pixels);
+
+        // render image
+        if (RENDER) {
+
+            // render initial state
+            renderWorld2 << <blocks, threads >> > (image_buffer, nx, ny, *world);
+            
+            checkCudaErrors(cudaGetLastError());
+            checkCudaErrors(cudaDeviceSynchronize());
+
+            // now render refractions
+            for (int numRefractions = 0; numRefractions < MAX_DEPTH; numRefractions++) {
+                renderRefraction << <blocks, threads >> > (image_buffer, nx, ny, *world);
+
+                checkCudaErrors(cudaGetLastError());
+                checkCudaErrors(cudaDeviceSynchronize());
+            }
+            
+        }
+
+        // save image
+        if (SAVING) {
+            std::ofstream out("out.ppm");
+            out << "P3\n" << nx << " " << ny << "\n255\n";
+            for (int j = ny - 1; j >= 0; j--) {
+                for (int i = 0; i < nx; i++) {
+                    int pixel_index = j * nx + i;
+                    int ir = int(255.99 * image_buffer[pixel_index].color.r);
+                    int ig = int(255.99 * image_buffer[pixel_index].color.g);
+                    int ib = int(255.99 * image_buffer[pixel_index].color.b);
+                    out << ir << " " << ig << " " << ib << "\n";
+                }
+            }
+        }
+
+        // what next?
+        char input[10];
+
+        std::cerr << "What action now?\n exit: programm stops\ncamera: load new camera\nworld: reload world\n";
+        std::cin >> input;
+
+        if (strcmp(input, "camera") == 0) {
+
+            std::ifstream file_("camera.txt");
+            if (!file_.is_open()) {
+                printf("Camera file not found!");
+                break;
+            }
+            std::string line_;
+            while (getline(file_, line_)) {
+                if (line_[0] == '#') continue;
+                if (line_.empty()) continue;
+                std::stringstream input(line_);
+                std::string paramName;
+                input >> paramName;
+                if (paramName == "Camera:") {
+                    float px, py, pz, fx, fy, fz, ux, uy, uz, fov;
+                    input >> px >> py >> pz >> fx >> fy >> fz >> ux >> uy >> uz >> fov;
+
+                    Vec4 origin(px, py, pz, 1.0f);
+                    Vec4 forward(fx, fy, fz);
+                    Vec4 upguide(ux, uy, uz);
+                    fov = fov * PI / 180.f;
+                    world->camera->createCamera(origin, forward, upguide, fov, aspectRatio);
+                    std::cerr << "Adjusted Camera\n";
+                    break;
+                }
+            
+            }
+        }
+
+    }
+
+
+}
+
 /*
 RENDER FUNCTION
 */
